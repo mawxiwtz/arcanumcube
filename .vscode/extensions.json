@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "gruntfuggly.todo-tree",
+    "ms-ceintl.vscode-language-pack-ja",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "oderwat.indent-rainbow",
+    "shardulm94.trailing-spaces"
+  ]
+}
