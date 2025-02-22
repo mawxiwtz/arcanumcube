@@ -9,8 +9,9 @@
             {
                 "imports": {
                     "arcanumcube": "./esm/arcanumcube.module.min.js",
-                    "three": "https://cdn.jsdelivr.net/npm/three@0.173.0/build/three.module.min.js",
+                    "three": "https://cdn.jsdelivr.net/npm/three@0.173.0/+esm",
                     "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.173.0/examples/jsm/",
+                    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.173.0/examples/jsm/",
                     "@tweenjs/tween.js": "https://cdn.jsdelivr.net/npm/@tweenjs/tween.js@25.0.0/+esm"
                 }
             }
@@ -18,6 +19,7 @@
         <script type="module">
             import * as THREE from 'three';
             import * as ARCCUBE from 'arcanumcube';
+            import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
             async function onLoad() {
                 const w = viewarea.clientWidth;
@@ -37,6 +39,8 @@
 
                 const camera = new THREE.PerspectiveCamera(45, w / h);
                 camera.position.set(0, 0, 30);
+                const controls = new OrbitControls(camera, viewarea);
+                controls.autoRotate = true;
 
                 // ambient light
                 const light = new THREE.AmbientLight('#fff', 1.0);
@@ -56,12 +60,16 @@
                 scene.add(arccubeGroup);
 
                 renderer.setAnimationLoop((time) => {
-                    // rotate cube
+                    /* rotate cube
                     arccubeGroup.rotation.x -= 0.005;
                     arccubeGroup.rotation.y += 0.005;
+                    */
 
                     // animate twisting
                     arccube.updateTweens();
+
+                    // orbit control
+                    controls.update();
 
                     renderer.render(scene, camera);
                 });

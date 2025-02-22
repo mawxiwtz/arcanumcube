@@ -1,13 +1,13 @@
 {
   "name": "arcanumcube",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Arcanum Cube",
   "type": "module",
   "license": "MIT",
   "author": "mawxiwtz",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mawxiwtz/arcanumcube"
+    "url": "git+https://github.com/mawxiwtz/arcanumcube.git"
   },
   "files": [
     "dist",

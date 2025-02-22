@@ -16,7 +16,7 @@ import {
     getRandomTwistList,
 } from './core.js';
 import type { Face, Twist, Sticker } from './core.js';
-import { type Skin, SkinMap, DefaultSkin, DefaultModel } from './skins.js';
+import { type Skin, DefaultSkin, DefaultModel } from './skins.js';
 
 export const CUBE_SIDE_LEN = 1.9; // meter of one side of cube (100/1 scale)
 
@@ -87,8 +87,9 @@ export type WebGLCubeConfig = {
     stickerScale: number;
     gap: number;
     enableShadow: boolean;
-    skin: string;
+    skin: Skin;
     envMap?: THREE.Texture;
+    wireframe: boolean;
 };
 
 class WebGLCube extends Cube {
@@ -111,7 +112,8 @@ class WebGLCube extends Cube {
             stickerScale: 0.92,
             gap: 0.01,
             enableShadow: false,
-            skin: DefaultSkin.name,
+            skin: DefaultSkin,
+            wireframe: false,
         };
 
         if (opts) {
@@ -119,7 +121,7 @@ class WebGLCube extends Cube {
             Object.assign(this._config, opts);
         }
 
-        this._skin = SkinMap[this._config.skin];
+        this._skin = this._config.skin;
     }
 
     getGroup(): THREE.Group {
@@ -167,9 +169,15 @@ class WebGLCube extends Cube {
         if (
             this._skin.enableEnvMap &&
             config.envMap &&
-            (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshBasicMaterial)
+            (mat instanceof THREE.MeshStandardMaterial ||
+                mat instanceof THREE.MeshBasicMaterial ||
+                mat instanceof THREE.MeshPhysicalMaterial)
         ) {
             mat.envMap = config.envMap;
+        }
+        if (config.wireframe) {
+            (<THREE.MeshBasicMaterial>mat).wireframe = config.wireframe;
+            (<THREE.MeshBasicMaterial>mat).color = new THREE.Color('#080');
         }
         const m = new THREE.Mesh(geo, mat);
         m.name = this.type;
@@ -181,6 +189,7 @@ class WebGLCube extends Cube {
             m.geometry.rotateZ((Math.PI * axis[2] * steps) / 2);
         }
         m.castShadow = config.enableShadow;
+        m.receiveShadow = config.enableShadow;
         m.position.x += (x - 1) * CUBE_SIDE_LEN * (1 + config.gap) * scale;
         m.position.y += (y - 1) * CUBE_SIDE_LEN * (1 + config.gap) * scale;
         m.position.z += (z - 1) * CUBE_SIDE_LEN * (1 + config.gap) * scale;
@@ -209,13 +218,19 @@ class WebGLCube extends Cube {
                 this._skin.enableEnvMap &&
                 config.envMap &&
                 (pmat instanceof THREE.MeshStandardMaterial ||
-                    pmat instanceof THREE.MeshBasicMaterial)
+                    pmat instanceof THREE.MeshBasicMaterial ||
+                    pmat instanceof THREE.MeshPhysicalMaterial)
             ) {
                 pmat.envMap = config.envMap;
+            }
+            if (config.wireframe) {
+                (<THREE.MeshBasicMaterial>pmat).wireframe = config.wireframe;
+                (<THREE.MeshBasicMaterial>pmat).color = new THREE.Color('#080');
             }
             const pm = new THREE.Mesh(pgeo, pmat);
             pm.name = CUBE.STICKER;
             pm.castShadow = config.enableShadow;
+            m.receiveShadow = config.enableShadow;
             const stickerAngle = STICKER_FACE_2_ANGLE[sticker.face];
             pm.geometry.rotateX((Math.PI * stickerAngle[0]) / 180);
             pm.geometry.rotateY((Math.PI * stickerAngle[1]) / 180);
@@ -297,11 +312,12 @@ export type WebGLArcanumCubeConfig = {
     stickerScale: number; // Sticker's relative scale
     gap: number; // Gap between cubes
     enableShadow: boolean; // Shadow
-    skin: string; // skin function
+    skin: Skin; // skin data
     envMap?: THREE.Texture; // texture for environment mapping
     showSelectedCube: boolean; // visualize focus
     showTwistGroup: boolean; // visualize the selection state
     enableLight: boolean; // grow up inner light
+    wireframe: boolean; // wireframe mode
 };
 
 /** Arcanum Cube object for WebGL class */
@@ -353,8 +369,9 @@ class WebGLArcanumCube extends ArcanumCube {
             stickerScale: 0.92,
             gap: 0.01,
             enableShadow: false,
-            skin: DefaultSkin.name,
+            skin: DefaultSkin,
             enableLight: false,
+            wireframe: false,
         };
         this._matrix = [];
         this._group = new THREE.Group();
@@ -378,12 +395,8 @@ class WebGLArcanumCube extends ArcanumCube {
         return this._cubeObjectList;
     }
 
-    static getSkinNameList(): string[] {
-        return Object.keys(SkinMap);
-    }
-
     override async init() {
-        const skin = SkinMap[this._config.skin];
+        const skin = this._config.skin;
         if (skin.modelLoading) {
             this._init();
         } else {
@@ -418,6 +431,7 @@ class WebGLArcanumCube extends ArcanumCube {
                         enableShadow: config.enableShadow,
                         skin: config.skin,
                         envMap: config.envMap,
+                        wireframe: config.wireframe,
                     });
                     cube.init();
                     xarray.push(cube);
@@ -430,7 +444,12 @@ class WebGLArcanumCube extends ArcanumCube {
                     if (config.enableLight) {
                         // point light
                         if (x !== SIDE_MIN && y !== SIDE_MIN && z !== SIDE_MIN) {
-                            const light = new THREE.PointLight(0x0080ff, 30, 20, 0.1);
+                            const light = new THREE.PointLight(
+                                config.wireframe ? 0x008000 : 0x0080ff,
+                                30,
+                                20,
+                                0.1,
+                            );
                             light.position.x =
                                 (x - 1 / 2) * CUBE_SIDE_LEN * (1 + config.gap) * config.scale;
                             light.position.y =
@@ -457,7 +476,7 @@ class WebGLArcanumCube extends ArcanumCube {
         this._group.add(fixedGroups);
     }
 
-    async setSkin(name: string) {
+    async setSkin(skin: Skin) {
         const dispose = (obj: THREE.Object3D) => {
             if (obj instanceof THREE.Group) {
                 for (const o of obj.children) {
@@ -470,7 +489,7 @@ class WebGLArcanumCube extends ArcanumCube {
             }
         };
 
-        this._config.skin = name;
+        this._config.skin = skin;
         for (const obj of this._group.children) {
             dispose(obj);
         }

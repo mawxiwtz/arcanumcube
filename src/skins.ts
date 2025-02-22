@@ -9,6 +9,14 @@ function createDefaultLogoTexture() {
     return texture;
 }
 
+export function GetSkinByName(name: string): Skin {
+    return SkinMap[name];
+}
+
+export function GetSkinNameList(): string[] {
+    return Object.keys(SkinMap);
+}
+
 export type Skin = {
     name: string;
     enableEnvMap: boolean;
@@ -357,13 +365,13 @@ const crystalSkin: Skin = {
             });
         },
         activate: (mesh: THREE.Mesh) => {
-            const mat = <THREE.MeshBasicMaterial>mesh.material;
+            const mat = <THREE.MeshPhysicalMaterial>mesh.material;
             mat.transparent = true;
             mat.opacity = 0.5;
             mat.needsUpdate = true;
         },
         deactivate: (mesh: THREE.Mesh) => {
-            const mat = <THREE.MeshBasicMaterial>mesh.material;
+            const mat = <THREE.MeshPhysicalMaterial>mesh.material;
             mat.transparent = true;
             mat.opacity = 0.2;
             mat.needsUpdate = true;
