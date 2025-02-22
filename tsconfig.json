@@ -12,6 +12,7 @@
     "strict": true,
     "outDir": "./dist",
     "noImplicitOverride": true,
+    "forceConsistentCasingInFileNames": true,
     "moduleResolution": "bundler"
   },
   "include": ["./src/**/*.ts"]

@@ -2,8 +2,20 @@
 export default {
     preset: 'ts-jest',
     testEnvironment: 'node',
-    roots: ['./test'],
+    roots: ['<rootDir>/test'],
+    transformIgnorePatterns: ['/node_modules/(?!three/examples/)'],
     transform: {
-        '^.+\\.(ts)$': 'ts-jest',
+        '^.+\\.tsx?$': [
+            'ts-jest',
+            {
+                useESM: true,
+            },
+        ],
+        'node_modules/three/examples/.+\\.(j|t)sx?$': 'ts-jest',
     },
+    moduleNameMapper: {
+        'src(.*)$': '<rootDir>/src/$1',
+        '^(\\.{1,2}/.*)\\.js$': '$1',
+    },
+    extensionsToTreatAsEsm: ['.ts'],
 };

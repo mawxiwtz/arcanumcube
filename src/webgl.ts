@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { GLTFLoader, GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+//import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import * as TWEEN from '@tweenjs/tween.js';
 import { OutlineShaderMaterial } from './materials.js';
 import {
     SIDE_MAX,
@@ -10,12 +14,11 @@ import {
     Cube,
     ArcanumCube,
     getRandomTwistList,
-} from './arcanumcube.js';
-import type { Face, Twist, Sticker } from './arcanumcube.js';
-import { type Skin, SkinMap, DefaultSkin } from './skins.js';
-import { GLTFLoader /*, GLTF */ } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
-import * as TWEEN from '@tweenjs/tween.js';
+} from './core.js';
+import type { Face, Twist, Sticker } from './core.js';
+import { type Skin, SkinMap, DefaultSkin, DefaultModel } from './skins.js';
+
+export const CUBE_SIDE_LEN = 1.9; // meter of one side of cube (100/1 scale)
 
 const COLOR_SELECTED = new THREE.Vector4(1.0, 0.7, 0.0, 1.0);
 
@@ -28,74 +31,95 @@ const STICKER_FACE_2_ANGLE: Record<Face, [x: number, y: number, z: number]> = {
     [FACE.L]: [90, -90, 0],
 } as const;
 
-async function _loadGLTFModel(filename: string): Promise<THREE.Mesh> {
+const cacheGLTFModels: Record<string, THREE.Mesh> = {};
+
+async function _loadGLTFModelGeometry(filename: string): Promise<THREE.Mesh> {
+    const getMeshFromGLTF = (model: GLTF) => {
+        const geos: THREE.BufferGeometry[] = [];
+        model.scene.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+                const m = child as THREE.Mesh;
+                geos.push(m.geometry);
+                //m.receiveShadow = true;
+                //m.castShadow = true;
+            }
+        });
+
+        const geometry = BufferGeometryUtils.mergeGeometries(geos);
+        return new THREE.Mesh(geometry, new THREE.MeshNormalMaterial());
+    };
+
+    /*
     const dracoLoader = new DRACOLoader();
     dracoLoader.setDecoderPath('./lib/draco/');
     dracoLoader.setDecoderConfig({ type: 'js' });
+    */
 
     const gltfLoader = new GLTFLoader();
-    gltfLoader.setDRACOLoader(dracoLoader);
+    //gltfLoader.setDRACOLoader(dracoLoader);
 
-    const result = await gltfLoader.loadAsync(filename).then((model) => {
-        // const data = model;
-        if (model.scene.children.length > 0) {
-            const mesh = <THREE.Mesh>model.scene.children[0];
-            return mesh;
-        } else {
-            throw new Error('Failed to load GLTF data.');
-        }
-    });
-    return result;
+    const mesh =
+        filename in DefaultModel
+            ? await gltfLoader.parseAsync(atob(DefaultModel[filename]), '.').then(getMeshFromGLTF) // read from embedded code
+            : await gltfLoader.loadAsync(filename).then(getMeshFromGLTF); // read fron gltf/glb file
+
+    cacheGLTFModels[filename] = mesh;
+    return mesh;
 }
 
 async function _loadModels(skin: Skin) {
-    skin.models[CUBE.AXIS] = await _loadGLTFModel(skin.modelFiles[CUBE.AXIS]);
-    skin.models[CUBE.CENTER] = await _loadGLTFModel(skin.modelFiles[CUBE.CENTER]);
-    skin.models[CUBE.EDGE] = await _loadGLTFModel(skin.modelFiles[CUBE.EDGE]);
-    skin.models[CUBE.CORNER] = await _loadGLTFModel(skin.modelFiles[CUBE.CORNER]);
-    skin.models[CUBE.STICKER] = await _loadGLTFModel(skin.modelFiles[CUBE.STICKER]);
+    const files = [CUBE.AXIS, CUBE.CENTER, CUBE.EDGE, CUBE.CORNER, CUBE.STICKER];
+    for (const f of files) {
+        const filename = skin.modelFiles[f];
+        skin.models[f] =
+            filename in cacheGLTFModels
+                ? cacheGLTFModels[filename]
+                : await _loadGLTFModelGeometry(filename);
+    }
 }
 
 type WebGLSticker = Sticker & {
     mesh?: THREE.Mesh;
 };
 
+export type WebGLCubeConfig = {
+    scale: number;
+    stickerScale: number;
+    gap: number;
+    enableShadow: boolean;
+    skin: string;
+    envMap?: THREE.Texture;
+};
+
 class WebGLCube extends Cube {
     protected override _stickers: WebGLSticker[] = [];
 
-    private _group = new THREE.Group();
-    private _entityGroup = new THREE.Group();
-    private _outlineGroup = new THREE.Group();
-    private _scale = 1.0;
-    private _stickerScale = 0.92;
-    private _gap = 0.01;
-    private _enableShadow = false;
-    private _skin: Skin = DefaultSkin;
-    private _envMap?: THREE.Texture;
+    private _config: WebGLCubeConfig;
+    private _skin: Skin;
+    private _group: THREE.Group;
+    private _entityGroup: THREE.Group;
+    private _outlineGroup: THREE.Group;
 
-    constructor(
-        x: number,
-        y: number,
-        z: number,
-        opts?: {
-            scale?: number;
-            stickerScale?: number;
-            gap?: number;
-            enableShadow?: boolean;
-            skin?: string;
-            envMap?: THREE.Texture;
-        },
-    ) {
+    constructor(x: number, y: number, z: number, opts?: Partial<WebGLCubeConfig>) {
         super(x, y, z);
 
+        this._group = new THREE.Group();
+        this._entityGroup = new THREE.Group();
+        this._outlineGroup = new THREE.Group();
+        this._config = {
+            scale: 1.0,
+            stickerScale: 0.92,
+            gap: 0.01,
+            enableShadow: false,
+            skin: DefaultSkin.name,
+        };
+
         if (opts) {
-            if (opts.scale != null) this._scale = opts.scale;
-            if (opts.stickerScale != null) this._stickerScale = opts.stickerScale;
-            if (opts.gap != null) this._gap = opts.gap;
-            if (opts.enableShadow != null) this._enableShadow = opts.enableShadow;
-            if (opts.skin != null) this._skin = SkinMap[opts.skin];
-            if (opts.envMap != null) this._envMap = opts.envMap;
+            // copy specified parameters
+            Object.assign(this._config, opts);
         }
+
+        this._skin = SkinMap[this._config.skin];
     }
 
     getGroup(): THREE.Group {
@@ -103,11 +127,11 @@ class WebGLCube extends Cube {
     }
 
     setStickerScale(scale: number) {
-        this._stickerScale = scale;
+        this._config.stickerScale = scale;
     }
 
     setGap(gap: number) {
-        this._gap = gap;
+        this._config.gap = gap;
     }
 
     override getStickers(): WebGLSticker[] {
@@ -127,6 +151,8 @@ class WebGLCube extends Cube {
 
         const { x, y, z } = this.position;
         const angles = CUBE_ANGLES[y][z][x];
+        const config = this._config;
+        const scale = config.scale;
 
         this._group.clear();
         this._entityGroup = new THREE.Group();
@@ -136,14 +162,14 @@ class WebGLCube extends Cube {
         // base
         const mesh = this._skin.models[this.type]; // model type
         const geo = mesh.geometry.clone();
-        geo.scale(this._scale, this._scale, this._scale);
+        geo.scale(scale, scale, scale);
         const mat = this._skin.cube.material();
         if (
             this._skin.enableEnvMap &&
-            this._envMap &&
+            config.envMap &&
             (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshBasicMaterial)
         ) {
-            mat.envMap = this._envMap;
+            mat.envMap = config.envMap;
         }
         const m = new THREE.Mesh(geo, mat);
         m.name = this.type;
@@ -154,10 +180,10 @@ class WebGLCube extends Cube {
             m.geometry.rotateY((Math.PI * axis[1] * steps) / 2);
             m.geometry.rotateZ((Math.PI * axis[2] * steps) / 2);
         }
-        m.castShadow = this._enableShadow;
-        m.position.x += (x - 1) * (1 + this._gap) * this._scale;
-        m.position.y += (y - 1) * (1 + this._gap) * this._scale;
-        m.position.z += (z - 1) * (1 + this._gap) * this._scale;
+        m.castShadow = config.enableShadow;
+        m.position.x += (x - 1) * CUBE_SIDE_LEN * (1 + config.gap) * scale;
+        m.position.y += (y - 1) * CUBE_SIDE_LEN * (1 + config.gap) * scale;
+        m.position.z += (z - 1) * CUBE_SIDE_LEN * (1 + config.gap) * scale;
         this._entityGroup.add(m);
 
         // outline mesh
@@ -176,31 +202,27 @@ class WebGLCube extends Cube {
         this._stickers.forEach((sticker) => {
             const pmesh = this._skin.models[CUBE.STICKER];
             const pgeo = pmesh.geometry.clone();
-            pgeo.scale(
-                this._scale * this._stickerScale,
-                this._scale,
-                this._scale * this._stickerScale,
-            );
+            pgeo.scale(scale * config.stickerScale, scale, scale * config.stickerScale);
             sticker.color = sticker.face; // face no === color no on initial time
             const pmat = this._skin.sticker.material(x, y, z, sticker.color);
             if (
                 this._skin.enableEnvMap &&
-                this._envMap &&
+                config.envMap &&
                 (pmat instanceof THREE.MeshStandardMaterial ||
                     pmat instanceof THREE.MeshBasicMaterial)
             ) {
-                pmat.envMap = this._envMap;
+                pmat.envMap = config.envMap;
             }
             const pm = new THREE.Mesh(pgeo, pmat);
             pm.name = CUBE.STICKER;
-            pm.castShadow = this._enableShadow;
+            pm.castShadow = config.enableShadow;
             const stickerAngle = STICKER_FACE_2_ANGLE[sticker.face];
             pm.geometry.rotateX((Math.PI * stickerAngle[0]) / 180);
             pm.geometry.rotateY((Math.PI * stickerAngle[1]) / 180);
             pm.geometry.rotateZ((Math.PI * stickerAngle[2]) / 180);
-            pm.position.x += (x - 1) * (1 + this._gap) * this._scale;
-            pm.position.y += (y - 1) * (1 + this._gap) * this._scale;
-            pm.position.z += (z - 1) * (1 + this._gap) * this._scale;
+            pm.position.x += (x - 1) * CUBE_SIDE_LEN * (1 + config.gap) * scale;
+            pm.position.y += (y - 1) * CUBE_SIDE_LEN * (1 + config.gap) * scale;
+            pm.position.z += (z - 1) * CUBE_SIDE_LEN * (1 + config.gap) * scale;
             this._entityGroup.add(pm);
             sticker.mesh = pm;
 
@@ -217,26 +239,23 @@ class WebGLCube extends Cube {
         this._group.add(this._outlineGroup);
     }
 
-    override reset() {
-        super.reset();
-        this._group.rotation.set(0, 0, 0);
-    }
-
     stretch(strength: number) {
+        const scale = this._config.scale;
+
         this._entityGroup.position.set(
-            (this._initialPosition.x - 1) * strength * this._scale,
-            (this._initialPosition.y - 1) * strength * this._scale,
-            (this._initialPosition.z - 1) * strength * this._scale,
+            (this._initialPosition.x - 1) * CUBE_SIDE_LEN * strength * scale,
+            (this._initialPosition.y - 1) * CUBE_SIDE_LEN * strength * scale,
+            (this._initialPosition.z - 1) * CUBE_SIDE_LEN * strength * scale,
         );
         this._outlineGroup.position.set(
-            (this._initialPosition.x - 1) * strength * this._scale,
-            (this._initialPosition.y - 1) * strength * this._scale,
-            (this._initialPosition.z - 1) * strength * this._scale,
+            (this._initialPosition.x - 1) * CUBE_SIDE_LEN * strength * scale,
+            (this._initialPosition.y - 1) * CUBE_SIDE_LEN * strength * scale,
+            (this._initialPosition.z - 1) * CUBE_SIDE_LEN * strength * scale,
         );
     }
 
     enableShadow(flag: boolean) {
-        this._enableShadow = flag;
+        this._config.enableShadow = flag;
     }
 
     select(flag = true) {
@@ -272,43 +291,35 @@ class WebGLCube extends Cube {
     }
 }
 
+export type WebGLArcanumCubeConfig = {
+    debug: boolean;
+    scale: number; // Cube's scale
+    stickerScale: number; // Sticker's relative scale
+    gap: number; // Gap between cubes
+    enableShadow: boolean; // Shadow
+    skin: string; // skin function
+    envMap?: THREE.Texture; // texture for environment mapping
+    showSelectedCube: boolean; // visualize focus
+    showTwistGroup: boolean; // visualize the selection state
+    enableLight: boolean; // grow up inner light
+};
+
 /** Arcanum Cube object for WebGL class */
 class WebGLArcanumCube extends ArcanumCube {
-    /** visualize focus */
-    showSelectedCube = false;
-
-    /** visualize the selection state */
-    showTwistGroup = false;
+    /** config */
+    private _config: WebGLArcanumCubeConfig;
 
     /** cube objects matrix */
-    protected override _matrix: WebGLCube[][][] = [];
+    protected override _matrix: WebGLCube[][][];
 
     /** WebGL THREE.js Group */
-    private _group = new THREE.Group();
-
-    /** Cube's scale */
-    private _scale = 1.0;
-
-    /** Sticker's relative scale */
-    private _stickerScale = 0.92;
-
-    /** Gap between cubes */
-    private _gap = 0.01;
-
-    /** Shadow */
-    private _enableShadow = false;
+    private _group: THREE.Group;
 
     /** cube meshes */
-    private _cubeObjectList: THREE.Group[] = [];
+    private _cubeObjectList: THREE.Group[];
 
     /** cube map */
-    private _cubeMap: Record<number, WebGLCube> = {};
-
-    /** skin function */
-    private _skin: string = DefaultSkin.name;
-
-    /** texture for environment mapping */
-    private _envMap?: THREE.Texture;
+    private _cubeMap: Record<number, WebGLCube>;
 
     /** selected cube */
     private _selectedCube?: WebGLCube;
@@ -323,49 +334,39 @@ class WebGLArcanumCube extends ArcanumCube {
     private _draggingTwist?: { twist: Twist; rad: number; group: THREE.Group };
 
     /** max degree to cancel the dragging */
-    private _cancelDragDeg = 15;
+    private _cancelDragDeg: number;
 
-    constructor(options?: {
-        debug?: boolean;
-        scale?: number;
-        stickerScale?: number;
-        gap?: number;
-        castShadow?: boolean;
-        skin?: string;
-        envMap?: THREE.Texture;
-        showSelectedCube?: boolean;
-        showTwistGroup?: boolean;
-    }) {
+    /** tween group */
+    private _tweens: TWEEN.Group;
+
+    /** light at the center of cube */
+    private _pointLights: THREE.PointLight[];
+
+    constructor(options?: Partial<WebGLArcanumCubeConfig>) {
         super(options);
 
+        this._config = {
+            debug: false,
+            showSelectedCube: false,
+            showTwistGroup: false,
+            scale: 1.0,
+            stickerScale: 0.92,
+            gap: 0.01,
+            enableShadow: false,
+            skin: DefaultSkin.name,
+            enableLight: false,
+        };
+        this._matrix = [];
+        this._group = new THREE.Group();
+        this._cubeObjectList = [];
+        this._cubeMap = {};
+        this._cancelDragDeg = 15;
+        this._tweens = new TWEEN.Group();
+        this._pointLights = [];
+
         if (options) {
-            if (options.debug != null) {
-                this.debug = options.debug;
-            }
-            if (options.scale != null) {
-                this._scale = options.scale;
-            }
-            if (options.stickerScale != null) {
-                this._stickerScale = options.stickerScale;
-            }
-            if (options.gap != null) {
-                this._gap = options.gap;
-            }
-            if (options.castShadow != null) {
-                this._enableShadow = options.castShadow;
-            }
-            if (options.skin != null) {
-                this._skin = options.skin;
-            }
-            if (options.envMap != null) {
-                this._envMap = options.envMap;
-            }
-            if (options.showSelectedCube != null) {
-                this.showSelectedCube = options.showSelectedCube;
-            }
-            if (options.showTwistGroup != null) {
-                this.showTwistGroup = options.showTwistGroup;
-            }
+            // copy specified parameters
+            Object.assign(this._config, options);
         }
     }
 
@@ -381,16 +382,15 @@ class WebGLArcanumCube extends ArcanumCube {
         return Object.keys(SkinMap);
     }
 
-    override init() {
-        const skin = SkinMap[this._skin];
+    override async init() {
+        const skin = SkinMap[this._config.skin];
         if (skin.modelLoading) {
             this._init();
         } else {
             // load models if not
+            await _loadModels(skin);
             skin.modelLoading = true;
-            _loadModels(skin).then(() => {
-                this._init();
-            });
+            this._init();
         }
     }
 
@@ -400,7 +400,9 @@ class WebGLArcanumCube extends ArcanumCube {
         this._cubeMap = {};
         this._matrix = [];
         this._history = [];
+        this._pointLights = [];
         const fixedGroups = new THREE.Group();
+        const config = this._config;
 
         // set 3x3x3 cubes
         const yarray: WebGLCube[][][] = [];
@@ -410,12 +412,12 @@ class WebGLArcanumCube extends ArcanumCube {
                 const xarray: WebGLCube[] = [];
                 for (let x = SIDE_MIN; x <= SIDE_MAX; x++) {
                     const cube = new WebGLCube(x, y, z, {
-                        scale: this._scale,
-                        stickerScale: this._stickerScale,
-                        gap: this._gap,
-                        enableShadow: this._enableShadow,
-                        skin: this._skin,
-                        envMap: this._envMap,
+                        scale: config.scale,
+                        stickerScale: config.stickerScale,
+                        gap: config.gap,
+                        enableShadow: config.enableShadow,
+                        skin: config.skin,
+                        envMap: config.envMap,
                     });
                     cube.init();
                     xarray.push(cube);
@@ -424,6 +426,20 @@ class WebGLArcanumCube extends ArcanumCube {
                     this._cubeObjectList.push(entityGroup);
                     this._cubeMap[entityGroup.id] = cube;
                     fixedGroups.add(cube.getGroup());
+
+                    if (config.enableLight) {
+                        // point light
+                        if (x !== SIDE_MIN && y !== SIDE_MIN && z !== SIDE_MIN) {
+                            const light = new THREE.PointLight(0x0080ff, 30, 20, 0.1);
+                            light.position.x =
+                                (x - 1 / 2) * CUBE_SIDE_LEN * (1 + config.gap) * config.scale;
+                            light.position.y =
+                                (y - 1 / 2) * CUBE_SIDE_LEN * (1 + config.gap) * config.scale;
+                            light.position.z +=
+                                (z - 1 / 2) * CUBE_SIDE_LEN * (1 + config.gap) * config.scale;
+                            this._pointLights.push(light);
+                        }
+                    }
                 }
                 zarray.push(xarray);
             }
@@ -433,10 +449,15 @@ class WebGLArcanumCube extends ArcanumCube {
         this._matrix = yarray;
 
         this._group.clear();
+        if (config.enableLight) {
+            this._pointLights.forEach((light) => {
+                this._group.add(light);
+            });
+        }
         this._group.add(fixedGroups);
     }
 
-    setSkin(name: string) {
+    async setSkin(name: string) {
         const dispose = (obj: THREE.Object3D) => {
             if (obj instanceof THREE.Group) {
                 for (const o of obj.children) {
@@ -449,73 +470,84 @@ class WebGLArcanumCube extends ArcanumCube {
             }
         };
 
-        this._skin = name;
+        this._config.skin = name;
         for (const obj of this._group.children) {
             dispose(obj);
         }
 
-        this.init();
+        await this.init();
     }
 
-    override reset() {
-        if (TWEEN.getAll().length > 0) return;
+    override reset(duration: number = 1800) {
+        if (this._tweens.getAll().length > 0) return;
+
         if (this._selectedCube) this.deselectCube();
         if (this._selectedSticker) this.deselectSticker();
         this._twistGroup = undefined;
         this._draggingTwist = undefined;
 
         const stretchSize = 1.5;
-        const qa: THREE.Quaternion[] = [];
         const qb = new THREE.Quaternion();
         const cubeList = Object.values(this._cubeMap);
 
-        cubeList.forEach((cube) => {
-            qa.push(cube.getGroup().quaternion.clone());
-        });
+        if (duration === 0) {
+            cubeList.forEach((cube, index) => {
+                cube.getGroup().quaternion.copy(qb);
+            });
+            super.reset();
+        } else {
+            const qa: THREE.Quaternion[] = [];
 
-        const params = { t: 0 };
-        const tweenExplode = new TWEEN.Tween(params)
-            .to({ t: 1 }, 500)
-            .easing(TWEEN.Easing.Quartic.Out)
-            .onUpdate(() => {
-                cubeList.forEach((cube) => {
-                    cube.stretch(stretchSize * params.t);
-                });
-            })
-            .onComplete(() => {
-                // do nothing
+            cubeList.forEach((cube) => {
+                qa.push(cube.getGroup().quaternion.clone());
             });
 
-        const params2 = { t: 0 };
-        const tweenReset = new TWEEN.Tween(params2)
-            .to({ t: 1 }, 800)
-            .easing(TWEEN.Easing.Quartic.Out)
-            .onUpdate(() => {
-                cubeList.forEach((cube, index) => {
-                    cube.getGroup().quaternion.slerpQuaternions(qa[index], qb, params2.t);
+            const params = { t: 0 };
+            const tweenExplode = new TWEEN.Tween(params)
+                .to({ t: 1 }, (duration * 5) / 18)
+                .easing(TWEEN.Easing.Quartic.Out)
+                .onUpdate(() => {
+                    cubeList.forEach((cube) => {
+                        cube.stretch(stretchSize * params.t);
+                    });
+                })
+                .onComplete(() => {
+                    this._tweens.remove(tweenExplode);
                 });
-            })
-            .onComplete(() => {
-                // process when tween is finished
-                super.reset();
-            });
 
-        const params3 = { t: 1 };
-        const tweenContract = new TWEEN.Tween(params3)
-            .to({ t: 0 }, 500)
-            .easing(TWEEN.Easing.Quartic.Out)
-            .onUpdate(() => {
-                cubeList.forEach((cube) => {
-                    cube.stretch(stretchSize * params3.t);
+            const params2 = { t: 0 };
+            const tweenReset = new TWEEN.Tween(params2)
+                .to({ t: 1 }, (duration * 8) / 18)
+                .easing(TWEEN.Easing.Quartic.Out)
+                .onUpdate(() => {
+                    cubeList.forEach((cube, index) => {
+                        cube.getGroup().quaternion.slerpQuaternions(qa[index], qb, params2.t);
+                    });
+                })
+                .onComplete(() => {
+                    // process when tween is finished
+                    super.reset();
+                    this._tweens.remove(tweenReset);
                 });
-            })
-            .onComplete(() => {
-                // do nothing
-            });
 
-        tweenExplode.chain(tweenReset);
-        tweenReset.chain(tweenContract);
-        tweenExplode.start();
+            const params3 = { t: 1 };
+            const tweenContract = new TWEEN.Tween(params3)
+                .to({ t: 0 }, (duration * 5) / 18)
+                .easing(TWEEN.Easing.Quartic.Out)
+                .onUpdate(() => {
+                    cubeList.forEach((cube) => {
+                        cube.stretch(stretchSize * params3.t);
+                    });
+                })
+                .onComplete(() => {
+                    this._tweens.remove(tweenContract);
+                });
+
+            tweenExplode.chain(tweenReset);
+            tweenReset.chain(tweenContract);
+            this._tweens.add(tweenExplode, tweenReset, tweenContract);
+            tweenExplode.start();
+        }
     }
 
     selectedCube(): WebGLCube | undefined {
@@ -562,7 +594,7 @@ class WebGLArcanumCube extends ArcanumCube {
     selectCube(cube?: WebGLCube) {
         this._selectedCube = cube;
 
-        if (!this.showSelectedCube) return;
+        if (!this._config.showSelectedCube) return;
         const cubes = Object.values(this._cubeMap);
         for (const c of cubes) {
             c.select(cube ? c === cube : false);
@@ -590,7 +622,7 @@ class WebGLArcanumCube extends ArcanumCube {
         const pos = cube.position;
         if (pos.x < 0) return;
 
-        if (!this.showTwistGroup) return;
+        if (!this._config.showTwistGroup) return;
 
         for (let y = SIDE_MIN; y <= SIDE_MAX; y++) {
             for (let z = SIDE_MIN; z <= SIDE_MAX; z++) {
@@ -623,7 +655,7 @@ class WebGLArcanumCube extends ArcanumCube {
     }
 
     deselectSticker() {
-        if (this.showTwistGroup) {
+        if (this._config.showTwistGroup) {
             for (let y = SIDE_MIN; y <= SIDE_MAX; y++) {
                 for (let z = SIDE_MIN; z <= SIDE_MAX; z++) {
                     for (let x = SIDE_MIN; x <= SIDE_MAX; x++) {
@@ -694,6 +726,11 @@ class WebGLArcanumCube extends ArcanumCube {
         }
 
         this._group.clear();
+        if (this._config.enableLight) {
+            this._pointLights.forEach((light) => {
+                this._group.add(light);
+            });
+        }
         this._group.add(twistGroup);
         this._group.add(fixedGroup);
 
@@ -701,7 +738,7 @@ class WebGLArcanumCube extends ArcanumCube {
     }
 
     dragTwist(twist: Twist, rad: number) {
-        if (TWEEN.getAll().length > 0) return;
+        if (this._tweens.getAll().length > 0) return;
 
         if (!this._draggingTwist || this._draggingTwist.twist != twist) {
             this._draggingTwist = {
@@ -718,7 +755,7 @@ class WebGLArcanumCube extends ArcanumCube {
     }
 
     dragTwistEnd() {
-        if (TWEEN.getAll().length > 0) return;
+        if (this._tweens.getAll().length > 0) return;
 
         if (this._draggingTwist) {
             const deg = (this._draggingTwist.rad * 180) / Math.PI;
@@ -733,31 +770,46 @@ class WebGLArcanumCube extends ArcanumCube {
     }
 
     // twist randomly several steps
-    override scramble(steps?: number) {
+    override scramble(steps: number = 0, duration: number = 3000) {
         const list = getRandomTwistList(steps);
-        this.tweenTwist(list, false, 3000);
+        this.tweenTwist(list, false, duration);
     }
 
-    override undo(steps: number = 1) {
+    override undo(steps: number = 1, duration: number = 300) {
         const list = this.getUndoList(steps);
-        this.tweenTwist(list, true, 300, false);
+        this.tweenTwist(list, true, duration, false);
     }
 
+    // twisting(複数回対応)
+    // durationを0にするとTweenなしとなる
     tweenTwist(
         twist: Twist | Twist[],
-        reverse = false,
-        speed: number = 500,
+        reverse: boolean = false,
+        duration: number = 500,
         cancel: boolean = false,
     ) {
-        if (TWEEN.getAll().length > 0) return;
+        if (this._tweens.getAll().length > 0) return;
+
+        if (duration === 0) {
+            if (Array.isArray(twist)) {
+                if (twist.length == 0) return;
+                for (const c of twist) {
+                    this._immediatelyTwist(c, reverse);
+                }
+            } else {
+                this._immediatelyTwist(twist, reverse);
+            }
+            return;
+        }
 
         let firstTween: TWEEN.Tween<{ t: number }> | undefined = undefined;
         let tween: TWEEN.Tween<{ t: number }> | undefined = undefined;
         if (Array.isArray(twist)) {
             if (twist.length == 0) return;
-            const lap = speed / twist.length;
+            const lap = duration / twist.length;
             for (const c of twist) {
                 const t = this._tweenTwist(c, reverse, lap, cancel);
+                this._tweens.add(t);
                 if (!tween) {
                     firstTween = tween = t;
                 } else {
@@ -766,15 +818,39 @@ class WebGLArcanumCube extends ArcanumCube {
                 }
             }
         } else {
-            firstTween = this._tweenTwist(twist, reverse, speed, cancel);
+            firstTween = this._tweenTwist(twist, reverse, duration, cancel);
+            this._tweens.add(firstTween);
         }
-        if (firstTween) firstTween.start();
+        if (firstTween) {
+            firstTween.start();
+        }
     }
 
+    // twist immediately
+    private _immediatelyTwist(twist: Twist, reverse: boolean) {
+        const { axis, steps } = TWIST_RULE[twist];
+        const rad = (reverse ? -1 : 1) * Math.PI * (steps / 2);
+        const qb = new THREE.Quaternion(); // end quaternion
+        qb.setFromAxisAngle(new THREE.Vector3(axis[0], axis[1], axis[2]), rad);
+
+        this._twistGroup = this._reconstructGroups(twist);
+        this._twistGroup.quaternion.copy(qb);
+
+        for (const cubeObject of this._twistGroup.children) {
+            cubeObject.quaternion.copy(
+                this._twistGroup.quaternion.clone().multiply(cubeObject.quaternion),
+            );
+        }
+        this._twistGroup.rotation.set(0, 0, 0);
+        this._twistGroup = undefined;
+        super.twist(twist, reverse);
+    }
+
+    // twist with tween
     private _tweenTwist(
         twist: Twist,
         reverse: boolean,
-        speed: number,
+        duration: number,
         cancel: boolean,
     ): TWEEN.Tween<{ t: number }> {
         let qa: THREE.Quaternion;
@@ -795,7 +871,7 @@ class WebGLArcanumCube extends ArcanumCube {
 
         const params = { t: 0 };
         const tween = new TWEEN.Tween(params)
-            .to({ t: 1 }, speed)
+            .to({ t: 1 }, duration)
             .easing(TWEEN.Easing.Quartic.Out) // graph: https://sbcode.net/threejs/tween/
             .onUpdate(() => {
                 if (!this._twistGroup) {
@@ -819,11 +895,16 @@ class WebGLArcanumCube extends ArcanumCube {
                 if (!cancel) {
                     super.twist(twist, reverse);
                 }
+                this._tweens.remove(tween);
             });
 
         return tween;
     }
+
+    updateTweens() {
+        this._tweens.update();
+    }
 }
 
-export * from './arcanumcube.js';
+export * from './core.js';
 export { WebGLArcanumCube };
