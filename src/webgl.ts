@@ -22,6 +22,12 @@ export const CUBE_SIDE_LEN = 1.9; // meter of one side of cube (100/1 scale)
 
 const COLOR_SELECTED = new THREE.Vector4(1.0, 0.7, 0.0, 1.0);
 
+export type TwistOptions = {
+    onStart?: (self: WebGLArcanumCube) => void;
+    onTwisted?: (self: WebGLArcanumCube, twist: Twist, step: number, total: number) => void;
+    onComplete?: (self: WebGLArcanumCube) => void;
+};
+
 const STICKER_FACE_2_ANGLE: Record<Face, [x: number, y: number, z: number]> = {
     [FACE.U]: [0, 0, 0],
     [FACE.F]: [90, 0, 0],
@@ -90,6 +96,7 @@ export type WebGLCubeConfig = {
     skin: Skin;
     envMap?: THREE.Texture;
     wireframe: boolean;
+    wireframeColor: THREE.ColorRepresentation;
 };
 
 class WebGLCube extends Cube {
@@ -114,6 +121,7 @@ class WebGLCube extends Cube {
             enableShadow: false,
             skin: DefaultSkin,
             wireframe: false,
+            wireframeColor: 0x008000,
         };
 
         if (opts) {
@@ -177,7 +185,7 @@ class WebGLCube extends Cube {
         }
         if (config.wireframe) {
             (<THREE.MeshBasicMaterial>mat).wireframe = config.wireframe;
-            (<THREE.MeshBasicMaterial>mat).color = new THREE.Color('#080');
+            (<THREE.MeshBasicMaterial>mat).color = new THREE.Color(config.wireframeColor);
         }
         const m = new THREE.Mesh(geo, mat);
         m.name = this.type;
@@ -225,7 +233,7 @@ class WebGLCube extends Cube {
             }
             if (config.wireframe) {
                 (<THREE.MeshBasicMaterial>pmat).wireframe = config.wireframe;
-                (<THREE.MeshBasicMaterial>pmat).color = new THREE.Color('#080');
+                (<THREE.MeshBasicMaterial>pmat).color = new THREE.Color(config.wireframeColor);
             }
             const pm = new THREE.Mesh(pgeo, pmat);
             pm.name = CUBE.STICKER;
@@ -316,8 +324,13 @@ export type WebGLArcanumCubeConfig = {
     envMap?: THREE.Texture; // texture for environment mapping
     showSelectedCube: boolean; // visualize focus
     showTwistGroup: boolean; // visualize the selection state
-    enableLight: boolean; // grow up inner light
+    autoReset: boolean; // auto reset when status is solved
+    enableCoreLight: boolean; // grow up core light
+    coreLightColor: THREE.ColorRepresentation; // core light color
+    coreLightIntensity: number; // core light intensity
     wireframe: boolean; // wireframe mode
+    wireframeColor: THREE.ColorRepresentation; // wireframe color
+    twistOptions?: TwistOptions; // options for tween twist action
 };
 
 /** Arcanum Cube object for WebGL class */
@@ -356,7 +369,7 @@ class WebGLArcanumCube extends ArcanumCube {
     private _tweens: TWEEN.Group;
 
     /** light at the center of cube */
-    private _pointLights: THREE.PointLight[];
+    private _coreLights: THREE.PointLight[];
 
     constructor(options?: Partial<WebGLArcanumCubeConfig>) {
         super(options);
@@ -370,8 +383,13 @@ class WebGLArcanumCube extends ArcanumCube {
             gap: 0.01,
             enableShadow: false,
             skin: DefaultSkin,
-            enableLight: false,
+            autoReset: true,
+            enableCoreLight: false,
+            coreLightColor: 0x0080ff,
+            coreLightIntensity: 30,
             wireframe: false,
+            wireframeColor: 0x008000,
+            twistOptions: {},
         };
         this._matrix = [];
         this._group = new THREE.Group();
@@ -379,7 +397,7 @@ class WebGLArcanumCube extends ArcanumCube {
         this._cubeMap = {};
         this._cancelDragDeg = 15;
         this._tweens = new TWEEN.Group();
-        this._pointLights = [];
+        this._coreLights = [];
 
         if (options) {
             // copy specified parameters
@@ -413,7 +431,7 @@ class WebGLArcanumCube extends ArcanumCube {
         this._cubeMap = {};
         this._matrix = [];
         this._history = [];
-        this._pointLights = [];
+        this._coreLights = [];
         const fixedGroups = new THREE.Group();
         const config = this._config;
 
@@ -432,6 +450,7 @@ class WebGLArcanumCube extends ArcanumCube {
                         skin: config.skin,
                         envMap: config.envMap,
                         wireframe: config.wireframe,
+                        wireframeColor: config.wireframeColor,
                     });
                     cube.init();
                     xarray.push(cube);
@@ -441,12 +460,12 @@ class WebGLArcanumCube extends ArcanumCube {
                     this._cubeMap[entityGroup.id] = cube;
                     fixedGroups.add(cube.getGroup());
 
-                    if (config.enableLight) {
+                    if (config.enableCoreLight) {
                         // point light
                         if (x !== SIDE_MIN && y !== SIDE_MIN && z !== SIDE_MIN) {
                             const light = new THREE.PointLight(
-                                config.wireframe ? 0x008000 : 0x0080ff,
-                                30,
+                                config.wireframe ? config.wireframeColor : config.coreLightColor,
+                                config.coreLightIntensity,
                                 20,
                                 0.1,
                             );
@@ -456,7 +475,7 @@ class WebGLArcanumCube extends ArcanumCube {
                                 (y - 1 / 2) * CUBE_SIDE_LEN * (1 + config.gap) * config.scale;
                             light.position.z +=
                                 (z - 1 / 2) * CUBE_SIDE_LEN * (1 + config.gap) * config.scale;
-                            this._pointLights.push(light);
+                            this._coreLights.push(light);
                         }
                     }
                 }
@@ -468,8 +487,8 @@ class WebGLArcanumCube extends ArcanumCube {
         this._matrix = yarray;
 
         this._group.clear();
-        if (config.enableLight) {
-            this._pointLights.forEach((light) => {
+        if (config.enableCoreLight) {
+            this._coreLights.forEach((light) => {
                 this._group.add(light);
             });
         }
@@ -745,8 +764,8 @@ class WebGLArcanumCube extends ArcanumCube {
         }
 
         this._group.clear();
-        if (this._config.enableLight) {
-            this._pointLights.forEach((light) => {
+        if (this._config.enableCoreLight) {
+            this._coreLights.forEach((light) => {
                 this._group.add(light);
             });
         }
@@ -791,7 +810,7 @@ class WebGLArcanumCube extends ArcanumCube {
     // twist randomly several steps
     override scramble(steps: number = 0, duration: number = 3000) {
         const list = getRandomTwistList(steps);
-        this.tweenTwist(list, false, duration);
+        this.tweenTwist(list, false, duration, false);
     }
 
     override undo(steps: number = 1, duration: number = 300) {
@@ -806,18 +825,28 @@ class WebGLArcanumCube extends ArcanumCube {
         reverse: boolean = false,
         duration: number = 500,
         cancel: boolean = false,
+        options?: TwistOptions,
     ) {
         if (this._tweens.getAll().length > 0) return;
+
+        if (options == null) options = this._config.twistOptions;
 
         if (duration === 0) {
             if (Array.isArray(twist)) {
                 if (twist.length == 0) return;
-                for (const c of twist) {
+                options?.onStart && options.onStart(this);
+                const len = twist.length;
+                for (let i = 0; i < len; i++) {
+                    const c = twist[i];
                     this._immediatelyTwist(c, reverse);
+                    options?.onTwisted && options.onTwisted(this, c, i + 1, len);
                 }
             } else {
+                options?.onStart && options.onStart(this);
                 this._immediatelyTwist(twist, reverse);
+                options?.onTwisted && options.onTwisted(this, twist, 1, 1);
             }
+            options?.onComplete && options.onComplete(this);
             return;
         }
 
@@ -826,9 +855,26 @@ class WebGLArcanumCube extends ArcanumCube {
         if (Array.isArray(twist)) {
             if (twist.length == 0) return;
             const lap = duration / twist.length;
-            for (const c of twist) {
-                const t = this._tweenTwist(c, reverse, lap, cancel);
+            const len = twist.length;
+            for (let i = 0; i < len; i++) {
+                const c = twist[i];
+                const opts: TwistOptions = {};
+
+                // set func after every twisted
+                const ontwisted = options?.onTwisted;
+                if (ontwisted)
+                    opts.onTwisted = (
+                        self: WebGLArcanumCube,
+                        twist: Twist,
+                        n1: number,
+                        n2: number,
+                    ) => ontwisted(this, twist, i + 1, len);
+                // set func after the last twisted
+                if (i === len - 1 && options?.onComplete) opts.onComplete = options.onComplete;
+
+                const t = this._tweenTwist(c, reverse, lap, cancel, opts);
                 this._tweens.add(t);
+
                 if (!tween) {
                     firstTween = tween = t;
                 } else {
@@ -837,10 +883,11 @@ class WebGLArcanumCube extends ArcanumCube {
                 }
             }
         } else {
-            firstTween = this._tweenTwist(twist, reverse, duration, cancel);
+            firstTween = this._tweenTwist(twist, reverse, duration, cancel, options);
             this._tweens.add(firstTween);
         }
         if (firstTween) {
+            options?.onStart && options.onStart(this);
             firstTween.start();
         }
     }
@@ -871,6 +918,7 @@ class WebGLArcanumCube extends ArcanumCube {
         reverse: boolean,
         duration: number,
         cancel: boolean,
+        options: TwistOptions = {},
     ): TWEEN.Tween<{ t: number }> {
         let qa: THREE.Quaternion;
         if (this._draggingTwist) {
@@ -915,6 +963,12 @@ class WebGLArcanumCube extends ArcanumCube {
                     super.twist(twist, reverse);
                 }
                 this._tweens.remove(tween);
+
+                options.onTwisted && options.onTwisted(this, twist, 1, 1);
+                options.onComplete && options.onComplete(this);
+
+                // clear history;
+                if (this._config.autoReset && this.isSolved()) this.reset(0);
             });
 
         return tween;
@@ -922,6 +976,21 @@ class WebGLArcanumCube extends ArcanumCube {
 
     updateTweens() {
         this._tweens.update();
+    }
+
+    // set color of core lights
+    setCoreLightColor(color: THREE.ColorRepresentation) {
+        const c = new THREE.Color(color);
+        this._coreLights.forEach((l) => {
+            l.color = c;
+        });
+    }
+
+    // change intensity of core lights
+    setCoreLightIntensity(intensity: number) {
+        this._coreLights.forEach((l) => {
+            l.intensity = intensity;
+        });
     }
 }
 

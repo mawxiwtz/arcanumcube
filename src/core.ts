@@ -270,11 +270,67 @@ export function getRandomTwistList(steps: number = 0) {
     return list;
 }
 
+// list of faces surrounding each face
+const SIDE_FACES = Object.freeze([
+    [1, 2, 4, 5],
+    [2, 0, 5, 3],
+    [0, 1, 3, 4],
+    [2, 1, 5, 4],
+    [0, 2, 3, 5],
+    [1, 0, 4, 3],
+]);
+
+// get the initial surface state
+//   up:    the side that comes up
+//   front: front side
+function getInitialState(up: number, front: number): StickerColor[] {
+    const down = (up + 3) % 6;
+    const side = SIDE_FACES[up];
+
+    const state = new Array(CUBE_SIZE * CUBE_SIZE).fill(up);
+    for (let i = 0; i < 4; i++) {
+        if (i == 2) {
+            const downs = [...Array(CUBE_SIZE * CUBE_SIZE)].fill(down);
+            state.push(...downs);
+        }
+        const sides = [...Array(CUBE_SIZE * CUBE_SIZE)].fill(side[(front + i) % 4]);
+        state.push(...sides);
+    }
+
+    return state;
+}
+
+// determine if array elements match
+function isSameArrays(arr1: number[], arr2: number[]): boolean {
+    if (arr1.length !== arr2.length) return false;
+
+    return !arr1.some((v, i) => v !== arr2[i]);
+}
+
+// get a list with all 6 sides
+// (there are 24 patterns in total, 6 types for the top side and 4 types
+// for the front side)
+const GOAL_STATE_LIST: StickerColor[][] = [];
+for (let up = 0; up < 6; up++) {
+    for (let front = 0; front < 4; front++) {
+        GOAL_STATE_LIST.push(getInitialState(up, front));
+    }
+}
+Object.freeze(GOAL_STATE_LIST);
+
+// returns whether the goal state is met.
+// that is, it returns whether it is resolved or not.
+export function MatchGoalState(state: StickerColor[]): boolean {
+    return GOAL_STATE_LIST.some((s) => isSameArrays(state, s));
+}
+
+// type of sticker
 export type Sticker = {
     face: Face;
     color: StickerColor;
 };
 
+/** One small cube class that makes up the Arcanum Cube */
 export class Cube {
     type: string;
     position: { x: number; y: number; z: number };
@@ -451,6 +507,10 @@ export class ArcanumCube {
     undo(steps: number = 1) {
         const list = this.getUndoList(steps);
         this.twist(list, true);
+    }
+
+    isSolved(): boolean {
+        return MatchGoalState(this.getStickerColors());
     }
 
     getHistory(): Twist[] {

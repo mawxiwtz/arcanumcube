@@ -46,9 +46,14 @@
                 const light = new THREE.AmbientLight('#fff', 1.0);
                 scene.add(light);
 
+                // sun light
+                const sunLight = new THREE.DirectionalLight('#fff', 1.0);
+                sunLight.position.set(-16, 80, 48);
+                scene.add(sunLight);
+
                 // spot light
-                const spotLight = new THREE.SpotLight('#fff', 2.0, 20, Math.PI / 4, 0.6, 0.01);
-                spotLight.position.set(4, 8, 4);
+                const spotLight = new THREE.SpotLight('#fff', 4, 64, Math.PI / 6, 0.8, 0.01);
+                spotLight.position.set(12, 12, 6);
                 spotLight.target.position.set(0, 0, 0);
                 scene.add(spotLight);
 
@@ -60,11 +65,6 @@
                 scene.add(arccubeGroup);
 
                 renderer.setAnimationLoop((time) => {
-                    /* rotate cube
-                    arccubeGroup.rotation.x -= 0.005;
-                    arccubeGroup.rotation.y += 0.005;
-                    */
-
                     // animate twisting
                     arccube.updateTweens();
 
