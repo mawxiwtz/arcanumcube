@@ -4,7 +4,7 @@ import fse from 'fs-extra';
 
 const progname = 'arcanumcube';
 const srcdir = './src';
-const sources = [`${srcdir}/${progname}.ts`];
+const sources = [`${srcdir}/${progname}.ts`, `${srcdir}/core.ts`];
 const externals = ['three', '@tweenjs'];
 const destdir = './dist';
 const staticdir = './static';
@@ -36,7 +36,8 @@ const buildOptions = {
 await esbuild.build({
     ...buildOptions,
     format: 'cjs',
-    outfile: `${destdir}/cjs/${progname}.cjs`,
+    entryNames: '[name]',
+    outdir: `${destdir}/cjs`,
 });
 
 /////////////////////////////////////
@@ -44,7 +45,8 @@ await esbuild.build({
 const buildOptionsESMMinify = {
     ...buildOptions,
     format: 'esm',
-    outfile: `${destdir}/esm/${progname}.module.min.js`,
+    entryNames: '[name].module.min',
+    outdir: `${destdir}/esm`,
     minify: true,
 };
 await esbuild.build(buildOptionsESMMinify);
@@ -52,7 +54,8 @@ await esbuild.build(buildOptionsESMMinify);
 const buildOptionsESM = {
     ...buildOptions,
     format: 'esm',
-    outfile: `${destdir}/esm/${progname}.module.js`,
+    entryNames: '/[name].module',
+    outdir: `${destdir}/esm`,
 };
 
 if (isServeMode) {

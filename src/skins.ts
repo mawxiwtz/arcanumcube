@@ -50,7 +50,7 @@ const standardSkin: Skin = {
     cube: {
         material: () => {
             return new THREE.MeshStandardMaterial({
-                color: 0x111111,
+                color: 0x2f2f2f,
                 metalness: 0.8,
                 roughness: 0.4,
             });

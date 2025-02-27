@@ -26,6 +26,7 @@ export type TwistOptions = {
     onStart?: (self: WebGLArcanumCube) => void;
     onTwisted?: (self: WebGLArcanumCube, twist: Twist, step: number, total: number) => void;
     onComplete?: (self: WebGLArcanumCube) => void;
+    onSolved?: (self: WebGLArcanumCube) => void;
 };
 
 const STICKER_FACE_2_ANGLE: Record<Face, [x: number, y: number, z: number]> = {
@@ -324,7 +325,6 @@ export type WebGLArcanumCubeConfig = {
     envMap?: THREE.Texture; // texture for environment mapping
     showSelectedCube: boolean; // visualize focus
     showTwistGroup: boolean; // visualize the selection state
-    autoReset: boolean; // auto reset when status is solved
     enableCoreLight: boolean; // grow up core light
     coreLightColor: THREE.ColorRepresentation; // core light color
     coreLightIntensity: number; // core light intensity
@@ -334,7 +334,7 @@ export type WebGLArcanumCubeConfig = {
 };
 
 /** Arcanum Cube object for WebGL class */
-class WebGLArcanumCube extends ArcanumCube {
+export class WebGLArcanumCube extends ArcanumCube {
     /** config */
     private _config: WebGLArcanumCubeConfig;
 
@@ -371,6 +371,9 @@ class WebGLArcanumCube extends ArcanumCube {
     /** light at the center of cube */
     private _coreLights: THREE.PointLight[];
 
+    /** status of locking the twist */
+    private _lockTwist: boolean;
+
     constructor(options?: Partial<WebGLArcanumCubeConfig>) {
         super(options);
 
@@ -383,7 +386,6 @@ class WebGLArcanumCube extends ArcanumCube {
             gap: 0.01,
             enableShadow: false,
             skin: DefaultSkin,
-            autoReset: true,
             enableCoreLight: false,
             coreLightColor: 0x0080ff,
             coreLightIntensity: 30,
@@ -398,6 +400,7 @@ class WebGLArcanumCube extends ArcanumCube {
         this._cancelDragDeg = 15;
         this._tweens = new TWEEN.Group();
         this._coreLights = [];
+        this._lockTwist = false;
 
         if (options) {
             // copy specified parameters
@@ -516,8 +519,16 @@ class WebGLArcanumCube extends ArcanumCube {
         await this.init();
     }
 
+    lockTwist(flag: boolean) {
+        this._lockTwist = flag;
+    }
+
+    isTwisting(): boolean {
+        return this._tweens.getAll().length > 0;
+    }
+
     override reset(duration: number = 1800) {
-        if (this._tweens.getAll().length > 0) return;
+        if (this._lockTwist || this.isTwisting()) return;
 
         if (this._selectedCube) this.deselectCube();
         if (this._selectedSticker) this.deselectSticker();
@@ -776,7 +787,7 @@ class WebGLArcanumCube extends ArcanumCube {
     }
 
     dragTwist(twist: Twist, rad: number) {
-        if (this._tweens.getAll().length > 0) return;
+        if (this._lockTwist || this.isTwisting()) return;
 
         if (!this._draggingTwist || this._draggingTwist.twist != twist) {
             this._draggingTwist = {
@@ -793,7 +804,7 @@ class WebGLArcanumCube extends ArcanumCube {
     }
 
     dragTwistEnd() {
-        if (this._tweens.getAll().length > 0) return;
+        if (this._lockTwist || this.isTwisting()) return;
 
         if (this._draggingTwist) {
             const deg = (this._draggingTwist.rad * 180) / Math.PI;
@@ -827,9 +838,9 @@ class WebGLArcanumCube extends ArcanumCube {
         cancel: boolean = false,
         options?: TwistOptions,
     ) {
-        if (this._tweens.getAll().length > 0) return;
+        if (this._lockTwist || this.isTwisting()) return;
 
-        if (options == null) options = this._config.twistOptions;
+        options = { ...this._config.twistOptions, ...options };
 
         if (duration === 0) {
             if (Array.isArray(twist)) {
@@ -968,7 +979,9 @@ class WebGLArcanumCube extends ArcanumCube {
                 options.onComplete && options.onComplete(this);
 
                 // clear history;
-                if (this._config.autoReset && this.isSolved()) this.reset(0);
+                if (options.onSolved && this.isSolved()) {
+                    options.onSolved(this);
+                }
             });
 
         return tween;
@@ -993,6 +1006,3 @@ class WebGLArcanumCube extends ArcanumCube {
         });
     }
 }
-
-export * from './core.js';
-export { WebGLArcanumCube };

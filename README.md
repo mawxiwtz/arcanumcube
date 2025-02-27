@@ -4,8 +4,11 @@ Arcanum Cube Arcanum Cube is a WebGL cube puzzle module written in TypeScript. Y
 
 ## Demo Page
 
-- [Example](https://mawxiwtz.github.io/arcanumcube/) \
+- [Example1](https://mawxiwtz.github.io/arcanumcube/) \
   Rotation only
+
+- [Example2](https://mawxiwtz.github.io/arcanumcube-demo/) \
+  Demo of playing and solving with AI
 
 ## Installation
 
