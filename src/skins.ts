@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import * as ARCCUBE from './core.js';
 
-function createDefaultLogoTexture() {
+let DefaultLogoTextures: THREE.Texture | undefined;
+
+export function loadDefaultLogoTexture(): THREE.Texture {
+    if (DefaultLogoTextures) return DefaultLogoTextures;
     const image = <HTMLImageElement>document.createElementNS('http://www.w3.org/1999/xhtml', 'img');
     image.src = DefaultLogo;
     const texture = new THREE.Texture(image);
@@ -81,12 +84,14 @@ const standardSkin: Skin = {
 
             const col = ColorList[color];
             let texture = undefined;
+            /*
             if (x === ARCCUBE.SIDE_MIDDLE && y === ARCCUBE.SIDE_MAX && z === ARCCUBE.SIDE_MIDDLE) {
                 // load texture
                 // texture = new THREE.TextureLoader().load('./asset/standard/logo.png');
-                texture = createDefaultLogoTexture();
+                texture = loadDefaultLogoTexture();
                 texture.flipY = false;
             }
+            */
 
             const mat = new THREE.MeshStandardMaterial({
                 color: col,
@@ -161,11 +166,13 @@ const metalicSkin: Skin = {
 
             const col = ColorList[color];
             let texture = undefined;
+            /*
             if (x === ARCCUBE.SIDE_MIDDLE && y === ARCCUBE.SIDE_MAX && z === ARCCUBE.SIDE_MIDDLE) {
                 // load texture
-                texture = createDefaultLogoTexture();
+                texture = loadDefaultLogoTexture();
                 texture.flipY = false;
             }
+            */
 
             const mat = new THREE.MeshStandardMaterial({
                 color: col,
@@ -237,11 +244,13 @@ const goldSkin: Skin = {
 
             const col = ColorList[color];
             let texture = undefined;
+            /*
             if (x === ARCCUBE.SIDE_MIDDLE && y === ARCCUBE.SIDE_MAX && z === ARCCUBE.SIDE_MIDDLE) {
                 // load texture
-                texture = createDefaultLogoTexture();
+                texture = loadDefaultLogoTexture();
                 texture.flipY = false;
             }
+            */
 
             const mat = new THREE.MeshStandardMaterial({
                 color: col,
@@ -313,11 +322,13 @@ const acrylicSkin: Skin = {
 
             const col = ColorList[color];
             let texture = undefined;
+            /*
             if (x === ARCCUBE.SIDE_MIDDLE && y === ARCCUBE.SIDE_MAX && z === ARCCUBE.SIDE_MIDDLE) {
                 // load texture
-                texture = createDefaultLogoTexture();
+                texture = loadDefaultLogoTexture();
                 texture.flipY = false;
             }
+            */
 
             const mat = new THREE.MeshStandardMaterial({
                 color: col,
@@ -390,11 +401,13 @@ const crystalSkin: Skin = {
 
             const col = ColorList[color];
             let texture = undefined;
+            /*
             if (x === ARCCUBE.SIDE_MIDDLE && y === ARCCUBE.SIDE_MAX && z === ARCCUBE.SIDE_MIDDLE) {
                 // load texture
-                texture = createDefaultLogoTexture();
+                texture = loadDefaultLogoTexture();
                 texture.flipY = false;
             }
+            */
 
             const mat = new THREE.MeshBasicMaterial({
                 color: col,

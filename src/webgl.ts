@@ -330,7 +330,7 @@ export type WebGLArcanumCubeConfig = {
     coreLightIntensity: number; // core light intensity
     wireframe: boolean; // wireframe mode
     wireframeColor: THREE.ColorRepresentation; // wireframe color
-    twistOptions?: TwistOptions; // options for tween twist action
+    twistOptions?: TwistOptions; // options for twist easing action
 };
 
 /** Arcanum Cube object for WebGL class */
@@ -365,8 +365,8 @@ export class WebGLArcanumCube extends ArcanumCube {
     /** max degree to cancel the dragging */
     private _cancelDragDeg: number;
 
-    /** tween group */
-    private _tweens: TWEEN.Group;
+    /** easing group */
+    private _easings: TWEEN.Group;
 
     /** light at the center of cube */
     private _coreLights: THREE.PointLight[];
@@ -398,7 +398,7 @@ export class WebGLArcanumCube extends ArcanumCube {
         this._cubeObjectList = [];
         this._cubeMap = {};
         this._cancelDragDeg = 15;
-        this._tweens = new TWEEN.Group();
+        this._easings = new TWEEN.Group();
         this._coreLights = [];
         this._lockTwist = false;
 
@@ -524,7 +524,7 @@ export class WebGLArcanumCube extends ArcanumCube {
     }
 
     isTwisting(): boolean {
-        return this._tweens.getAll().length > 0;
+        return this._easings.getAll().length > 0;
     }
 
     override reset(duration: number = 1800) {
@@ -552,7 +552,7 @@ export class WebGLArcanumCube extends ArcanumCube {
             });
 
             const params = { t: 0 };
-            const tweenExplode = new TWEEN.Tween(params)
+            const easingExplode = new TWEEN.Tween(params)
                 .to({ t: 1 }, (duration * 5) / 18)
                 .easing(TWEEN.Easing.Quartic.Out)
                 .onUpdate(() => {
@@ -561,11 +561,11 @@ export class WebGLArcanumCube extends ArcanumCube {
                     });
                 })
                 .onComplete(() => {
-                    this._tweens.remove(tweenExplode);
+                    this._easings.remove(easingExplode);
                 });
 
             const params2 = { t: 0 };
-            const tweenReset = new TWEEN.Tween(params2)
+            const easingReset = new TWEEN.Tween(params2)
                 .to({ t: 1 }, (duration * 8) / 18)
                 .easing(TWEEN.Easing.Quartic.Out)
                 .onUpdate(() => {
@@ -574,13 +574,13 @@ export class WebGLArcanumCube extends ArcanumCube {
                     });
                 })
                 .onComplete(() => {
-                    // process when tween is finished
+                    // process when easing is finished
                     super.reset();
-                    this._tweens.remove(tweenReset);
+                    this._easings.remove(easingReset);
                 });
 
             const params3 = { t: 1 };
-            const tweenContract = new TWEEN.Tween(params3)
+            const easingContract = new TWEEN.Tween(params3)
                 .to({ t: 0 }, (duration * 5) / 18)
                 .easing(TWEEN.Easing.Quartic.Out)
                 .onUpdate(() => {
@@ -589,13 +589,13 @@ export class WebGLArcanumCube extends ArcanumCube {
                     });
                 })
                 .onComplete(() => {
-                    this._tweens.remove(tweenContract);
+                    this._easings.remove(easingContract);
                 });
 
-            tweenExplode.chain(tweenReset);
-            tweenReset.chain(tweenContract);
-            this._tweens.add(tweenExplode, tweenReset, tweenContract);
-            tweenExplode.start();
+            easingExplode.chain(easingReset);
+            easingReset.chain(easingContract);
+            this._easings.add(easingExplode, easingReset, easingContract);
+            easingExplode.start();
         }
     }
 
@@ -810,10 +810,10 @@ export class WebGLArcanumCube extends ArcanumCube {
             const deg = (this._draggingTwist.rad * 180) / Math.PI;
             if (deg > this._cancelDragDeg) {
                 // twist
-                this.tweenTwist(this._draggingTwist.twist);
+                this.easingTwist(this._draggingTwist.twist);
             } else {
                 // cancel twist
-                this.tweenTwist(this._draggingTwist.twist, false, 100, true);
+                this.easingTwist(this._draggingTwist.twist, false, 100, true);
             }
         }
     }
@@ -821,17 +821,17 @@ export class WebGLArcanumCube extends ArcanumCube {
     // twist randomly several steps
     override scramble(steps: number = 0, duration: number = 3000) {
         const list = getRandomTwistList(steps);
-        this.tweenTwist(list, false, duration, false);
+        this.easingTwist(list, false, duration, false);
     }
 
     override undo(steps: number = 1, duration: number = 300) {
         const list = this.getUndoList(steps);
-        this.tweenTwist(list, true, duration, false);
+        this.easingTwist(list, true, duration, false);
     }
 
     // twisting(複数回対応)
-    // durationを0にするとTweenなしとなる
-    tweenTwist(
+    // durationを0にするとEasingなしとなる
+    easingTwist(
         twist: Twist | Twist[],
         reverse: boolean = false,
         duration: number = 500,
@@ -861,8 +861,8 @@ export class WebGLArcanumCube extends ArcanumCube {
             return;
         }
 
-        let firstTween: TWEEN.Tween<{ t: number }> | undefined = undefined;
-        let tween: TWEEN.Tween<{ t: number }> | undefined = undefined;
+        let firstEasing: TWEEN.Tween<{ t: number }> | undefined = undefined;
+        let easing: TWEEN.Tween<{ t: number }> | undefined = undefined;
         if (Array.isArray(twist)) {
             if (twist.length == 0) return;
             const lap = duration / twist.length;
@@ -883,23 +883,23 @@ export class WebGLArcanumCube extends ArcanumCube {
                 // set func after the last twisted
                 if (i === len - 1 && options?.onComplete) opts.onComplete = options.onComplete;
 
-                const t = this._tweenTwist(c, reverse, lap, cancel, opts);
-                this._tweens.add(t);
+                const t = this._easingTwist(c, reverse, lap, cancel, opts);
+                this._easings.add(t);
 
-                if (!tween) {
-                    firstTween = tween = t;
+                if (!easing) {
+                    firstEasing = easing = t;
                 } else {
-                    tween.chain(t);
-                    tween = t;
+                    easing.chain(t);
+                    easing = t;
                 }
             }
         } else {
-            firstTween = this._tweenTwist(twist, reverse, duration, cancel, options);
-            this._tweens.add(firstTween);
+            firstEasing = this._easingTwist(twist, reverse, duration, cancel, options);
+            this._easings.add(firstEasing);
         }
-        if (firstTween) {
+        if (firstEasing) {
             options?.onStart && options.onStart(this);
-            firstTween.start();
+            firstEasing.start();
         }
     }
 
@@ -923,8 +923,8 @@ export class WebGLArcanumCube extends ArcanumCube {
         super.twist(twist, reverse);
     }
 
-    // twist with tween
-    private _tweenTwist(
+    // twist with easing
+    private _easingTwist(
         twist: Twist,
         reverse: boolean,
         duration: number,
@@ -948,9 +948,9 @@ export class WebGLArcanumCube extends ArcanumCube {
         }
 
         const params = { t: 0 };
-        const tween = new TWEEN.Tween(params)
+        const easing = new TWEEN.Tween(params)
             .to({ t: 1 }, duration)
-            .easing(TWEEN.Easing.Quartic.Out) // graph: https://sbcode.net/threejs/tween/
+            .easing(TWEEN.Easing.Quartic.Out)
             .onUpdate(() => {
                 if (!this._twistGroup) {
                     this._twistGroup = this._reconstructGroups(twist);
@@ -958,7 +958,7 @@ export class WebGLArcanumCube extends ArcanumCube {
                 this._twistGroup.quaternion.slerpQuaternions(qa, qb, params.t);
             })
             .onComplete(() => {
-                // process when tween is finished
+                // process when easing is finished
                 if (this._twistGroup) {
                     if (!cancel) {
                         for (const cubeObject of this._twistGroup.children) {
@@ -973,7 +973,7 @@ export class WebGLArcanumCube extends ArcanumCube {
                 if (!cancel) {
                     super.twist(twist, reverse);
                 }
-                this._tweens.remove(tween);
+                this._easings.remove(easing);
 
                 options.onTwisted && options.onTwisted(this, twist, 1, 1);
                 options.onComplete && options.onComplete(this);
@@ -984,11 +984,11 @@ export class WebGLArcanumCube extends ArcanumCube {
                 }
             });
 
-        return tween;
+        return easing;
     }
 
-    updateTweens() {
-        this._tweens.update();
+    update() {
+        this._easings.update();
     }
 
     // set color of core lights
