@@ -9,7 +9,8 @@
     {
       "files": "*.ts",
       "options": {
-        "semi": true
+        "semi": true,
+        "trailingComma": "all"
       }
     },
     {
@@ -21,6 +22,7 @@
     {
       "files": ["*.css"],
       "options": {
+        "tabWidth": 2,
         "printWidth": 120,
         "htmlWhitespaceSensitivity": "css"
       }
@@ -28,7 +30,8 @@
     {
       "files": "*.html",
       "options": {
-        "bracketSameLine": true
+        "bracketSameLine": true,
+        "htmlWhitespaceSensitivity": "ignore"
       }
     }
   ]

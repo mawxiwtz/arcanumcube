@@ -9,13 +9,16 @@
     "skipLibCheck": false,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "noEmit": true,
-    "types": ["vite/client", "jest"],
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": "./dist/types",
     "baseUrl": ".",
     "paths": {
       "@arcanumcube": ["src/index.ts"],
       "@arcanumcube/*": ["src/*"]
     }
   },
-  "include": ["src", "demo", "tests", "vite.config.ts"]
+  "include": ["src/*.ts"]
 }

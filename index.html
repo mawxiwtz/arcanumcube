@@ -1,97 +1,28 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
     <head>
-        <title>Arcanum Cube</title>
         <meta charset="utf-8" />
+        <title>Arcanum Cube</title>
         <meta
             name="viewport"
-            content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
+            content="width=device-width, user-scalable=no, initial-scale=1, viewport-fit=cover" />
+        <title>Mapricorn Demo - the Map Rendering Engine"</title>
+        <meta name="description" content="Arcanum Cube the Cube Puzzle" />
         <script type="importmap">
             {
                 "imports": {
-                    "arcanumcube": "./esm/arcanumcube.module.min.js",
-                    "three": "https://cdn.jsdelivr.net/npm/three@0.174.0/+esm",
-                    "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.174.0/examples/jsm/",
-                    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.174.0/examples/jsm/"
+                    "arcanumcube": "./arcanumcube.esm.js",
+                    "three": "https://cdn.jsdelivr.net/npm/three@0.181.1/+esm",
+                    "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/",
+                    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/",
+                    "@tweenjs/tween.js": "https://cdn.jsdelivr.net/npm/@tweenjs/tween.js@25.0.0/+esm"
                 }
             }
         </script>
-        <script type="module">
-            import * as THREE from 'three';
-            import * as ARCCUBE from 'arcanumcube';
-            import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-
-            async function onLoad() {
-                const w = viewarea.clientWidth;
-                const h = viewarea.clientHeight;
-                const renderer = new THREE.WebGLRenderer({
-                    antialias: true,
-                    alpha: true,
-                });
-                renderer.setSize(w, h);
-                renderer.setPixelRatio(window.devicePixelRatio);
-                renderer.setClearColor('#222');
-
-                const canvas = renderer.domElement;
-                viewarea.appendChild(canvas);
-
-                const scene = new THREE.Scene();
-
-                const camera = new THREE.PerspectiveCamera(45, w / h);
-                camera.position.set(0, 0, 30);
-                const controls = new OrbitControls(camera, viewarea);
-                controls.autoRotate = true;
-
-                // ambient light
-                const light = new THREE.AmbientLight('#fff', 1.0);
-                scene.add(light);
-
-                // sun light
-                const sunLight = new THREE.DirectionalLight('#fff', 1.0);
-                sunLight.position.set(-16, 80, 48);
-                scene.add(sunLight);
-
-                // spot light
-                const spotLight = new THREE.SpotLight('#fff', 4, 64, Math.PI / 6, 0.8, 0.01);
-                spotLight.position.set(12, 12, 6);
-                spotLight.target.position.set(0, 0, 0);
-                scene.add(spotLight);
-
-                // arcanum cube
-                const arccube = new ARCCUBE.WebGLArcanumCube();
-                await arccube.init();
-                const arccubeGroup = arccube.getGroup();
-                arccubeGroup.position.set(0, 0, 0);
-                scene.add(arccubeGroup);
-
-                renderer.setAnimationLoop((time) => {
-                    // animate twisting
-                    arccube.update();
-
-                    // orbit control
-                    controls.update();
-
-                    renderer.render(scene, camera);
-                });
-
-                // scramble(steps, duration);
-                arccube.scramble(60, 12000);
-            }
-
-            window.addEventListener('load', onLoad);
-        </script>
-        <style>
-            body {
-                margin: 0px;
-            }
-            div#viewarea {
-                margin: 0px;
-                width: 100dvw;
-                height: 100dvh;
-            }
-        </style>
     </head>
 
     <body>
         <div id="viewarea"></div>
+        <script type="module" src="./demo/main.ts"></script>
     </body>
 </html>

@@ -845,19 +845,19 @@ export class WebGLArcanumCube extends ArcanumCube {
         if (duration === 0) {
             if (Array.isArray(twist)) {
                 if (twist.length == 0) return;
-                options?.onStart && options.onStart(this);
+                options?.onStart?.(this);
                 const len = twist.length;
                 for (let i = 0; i < len; i++) {
                     const c = twist[i];
                     this._immediatelyTwist(c, reverse);
-                    options?.onTwisted && options.onTwisted(this, c, i + 1, len);
+                    options?.onTwisted?.(this, c, i + 1, len);
                 }
             } else {
-                options?.onStart && options.onStart(this);
+                options?.onStart?.(this);
                 this._immediatelyTwist(twist, reverse);
-                options?.onTwisted && options.onTwisted(this, twist, 1, 1);
+                options?.onTwisted?.(this, twist, 1, 1);
             }
-            options?.onComplete && options.onComplete(this);
+            options?.onComplete?.(this);
             return;
         }
 
@@ -898,7 +898,7 @@ export class WebGLArcanumCube extends ArcanumCube {
             this._easings.add(firstEasing);
         }
         if (firstEasing) {
-            options?.onStart && options.onStart(this);
+            options?.onStart?.(this);
             firstEasing.start();
         }
     }
@@ -975,8 +975,8 @@ export class WebGLArcanumCube extends ArcanumCube {
                 }
                 this._easings.remove(easing);
 
-                options.onTwisted && options.onTwisted(this, twist, 1, 1);
-                options.onComplete && options.onComplete(this);
+                options.onTwisted?.(this, twist, 1, 1);
+                options.onComplete?.(this);
 
                 // clear history;
                 if (options.onSolved && this.isSolved()) {

@@ -4,11 +4,11 @@ Arcanum Cube Arcanum Cube is a WebGL cube puzzle module written in TypeScript. Y
 
 ## Demo Page
 
-- [Example1](https://mawxiwtz.github.io/arcanumcube/) \
-  Rotation only
+-   [Example1](https://mawxiwtz.github.io/arcanumcube/) \
+    Rotation only
 
-- [Example2](https://mawxiwtz.github.io/arcanumcube-demo/) \
-  Demo of playing and solving with AI
+-   [Example2](https://mawxiwtz.github.io/arcanumcube-demo/) \
+    Demo of playing and solving with AI
 
 ## Installation
 
@@ -20,16 +20,22 @@ npm install arcanumcube
 
 ## Usage
 
-1. import Three.js and arcanumcube
+1. install dependencies
 
 ```
+npm install arcanumcube
+```
+
+2. import Three.js and arcanumcube
+
+```ts
 import * as THREE from 'three';
 import * as ARCCUBE from 'arcanumcube';
 ```
 
-2. create a cube object
+3. create a cube object
 
-```
+```ts
 const scene = new THREE.Scene();
     :
 const arccube = new ARCCUBE.WebGLArcanumCube();
@@ -43,19 +49,19 @@ renderer.setAnimationLoop((time) => {
     :
 
     // animate twisting
-    arccube.updateTweens();
+    arccube.update();
 
     renderer.render(scene, camera);
 });
 ```
 
-3. operations
+4. operations
 
-```
+```ts
 // scramble 30 steps
 arccube.scramble(30);
 // twist 'U' direction
-arccube.tweenTwist('U');
+arccube.easingTwist('U');
 // reset
 arccube.reset();
 ```
