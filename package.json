@@ -1,6 +1,6 @@
 {
   "name": "arcanumcube",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Arcanum Cube",
   "license": "MIT",
   "author": "mawxiwtz",
@@ -39,9 +39,8 @@
   "scripts": {
     "lint": "eslint .",
     "dev": "vite",
-    "build": "npm run build:lib && npm run build:demo",
-    "build:lib": "vite build && npm run build:types",
-    "build:types": "tsc -p tsconfig.types.json",
+    "build": "npm run build:dev && npm run build:minify && npm run build:demo",
+    "build:dev": "vite build && rollup -c rollup.config.dts.js",
     "build:minify": "node scripts/minify.mjs",
     "build:demo": "vite build --config vite.config.demo.ts",
     "clean": "rimraf dist",
@@ -60,6 +59,7 @@
     "jest": "^30.2.0",
     "jiti": "^2.6.1",
     "rimraf": "^6.1.0",
+    "rollup-plugin-dts": "^6.2.3",
     "ts-jest": "^29.4.5",
     "typedoc": "^0.28.14",
     "typescript": "^5.9.3",
@@ -67,7 +67,7 @@
     "vite": "^7.2.2"
   },
   "dependencies": {
-    "three": "^0.181.1",
-    "@tweenjs/tween.js": "^25.0.0"
+    "@tweenjs/tween.js": "^25.0.0",
+    "three": "^0.181.1"
   }
 }
