@@ -540,7 +540,7 @@ export class WebGLArcanumCube extends ArcanumCube {
         const cubeList = Object.values(this._cubeMap);
 
         if (duration === 0) {
-            cubeList.forEach((cube, index) => {
+            cubeList.forEach((cube /*, index*/) => {
                 cube.getGroup().quaternion.copy(qb);
             });
             super.reset();
@@ -877,8 +877,10 @@ export class WebGLArcanumCube extends ArcanumCube {
                     opts.onTwisted = (
                         self: WebGLArcanumCube,
                         twist: Twist,
+                        /*
                         n1: number,
                         n2: number,
+                        */
                     ) => ontwisted(this, twist, i + 1, len);
                 // set func after the last twisted
                 if (i === len - 1 && options?.onComplete) opts.onComplete = options.onComplete;
